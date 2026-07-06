@@ -87,8 +87,20 @@ enum poll_event_type {
     get_buf,
     destroy_buf,
     swap_to,
+#ifndef TARGET_USES_REAL_HWC
     create_buf
 };
+#else
+    create_buf,
+    disp_pwr
+};
+
+struct evdi_disp_power {
+    uint32_t display_id;
+    uint8_t power_on;
+};
+#endif
+
 
 struct drm_evdi_request_update {
     int32_t reserved;
@@ -404,6 +416,9 @@ void get_buf_from_map(const std::array<uint8_t, 32>& data, int poll_id);
 void swap_to_buff(const std::array<uint8_t, 32>& data, int poll_id);
 void destroy_buff(const std::array<uint8_t, 32>& data, int poll_id);
 void create_buff(const std::array<uint8_t, 32>& data, int poll_id);
+#ifdef TARGET_USES_REAL_HWC
+void handle_disp_pwr(const std::array<uint8_t, 32>& data, int poll_id);
+#endif
 
 void update_thread_main();
 void poll_thread_main();

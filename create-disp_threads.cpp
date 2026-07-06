@@ -138,6 +138,11 @@ void poll_thread_main()
                     case create_buf:
                         create_buff(poll_payload, poll_cmd.poll_id);
                         break;
+#ifdef TARGET_USES_REAL_HWC
+                    case disp_pwr:
+                        handle_disp_pwr(poll_payload, poll_cmd.poll_id);
+                        break;
+#endif
                     default:
                         break;
                 }

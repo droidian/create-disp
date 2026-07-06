@@ -212,6 +212,17 @@ void onDpmsReceived(HWC2EventListener* listener, int32_t sequenceId, hwc2_displa
                 drv_id, errno, strerror(errno));
     }
 }
+#else
+void handle_disp_pwr(const std::array<uint8_t, 32>& data, int poll_id)
+{
+    evdi_disp_power dp;
+    memcpy(&dp, data.data(), sizeof(struct evdi_disp_power));
+
+    fprintf(stderr, "HANDLE DISPLAY POWER: %d\n", dp.power_on);
+    Display& D = g_displays[dp.display_id];
+    hwc2_compat_display_set_power_mode(D.hwcDisplay, dp.power_on ? HWC2_POWER_MODE_ON : HWC2_POWER_MODE_OFF);
+    hwc2_compat_display_set_vsync_enabled(D.hwcDisplay, dp.power_on ? HWC2_VSYNC_ENABLE : HWC2_VSYNC_DISABLE);
+}
 #endif
 
 bool is_evdi_lindroid(int fd)
@@ -538,7 +549,6 @@ int update_display(int display_id)
         mode_changed = (D.width != target_width || D.height != target_height);
 
 #ifdef TARGET_USES_REAL_HWC
-        fprintf(stderr, "REAL HWC, SETUP LAYER AND POWER ON DISPLAY\n");
         if (D.layer) {
             hwc2_compat_display_destroy_layer(D.hwcDisplay, D.layer);
             D.layer = nullptr;
