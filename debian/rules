@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
-REAL_HWC ?= OFF
+REAL_HWC ?= ON
 
 %:
 	dh $@ --buildsystem=cmake --builddirectory=obj-$(DEB_HOST_GNU_TYPE)
