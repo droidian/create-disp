@@ -9,3 +9,10 @@ Package: create-disp
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends} libhybris
 Description: A tool to interface lindroid-drm with hwc2
+
+Package: create-disp-config-hwcomposer
+Architecture: any 
+Multi-Arch: foreign 
+Pre-Depends: ${misc:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: This package contains configurations required to start create-disp on hwcomposer.
