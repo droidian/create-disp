@@ -159,6 +159,10 @@ bool do_present(PresentJob& j)
         hwc2_error_t err = HWC2_ERROR_NONE;
         {
             std::lock_guard<std::mutex> hwc_lk(g_hwc_mutex[j.drv_display_id]);
+#ifdef TARGET_USES_REAL_HWC
+            Display& D = g_displays[j.drv_display_id];
+            D.presentDone = false;
+#endif
 
             dsnap = snapshot_display_runtime_atomic(j.drv_display_id);
             if (!display_runtime_present_ready(dsnap, j.generation)) [[unlikely]] {
@@ -195,8 +199,11 @@ bool do_present(PresentJob& j)
 
             int presentFence = -1;
             err = hwc2_compat_display_present(hwcDisp, &presentFence);
-            if (presentFence >= 0)
+            if (presentFence >= 0){
+                sync_wait(presentFence, -1);
                 close(presentFence);
+            }
+            D.presentDone = true;
 #endif
         }
 
