@@ -35,6 +35,7 @@
 #include <hybris/gralloc/gralloc.h>
 #include <hybris/hwc2/hwc2_compatibility_layer.h>
 #include <hybris/platforms/common/windowbuffer.h>
+#include <sync/sync.h>
 
 namespace create_disp {
 
@@ -205,6 +206,7 @@ struct Display {
     hwc2_compat_display_t* hwcDisplay = nullptr;
 #ifdef TARGET_USES_REAL_HWC
     hwc2_compat_layer_t* layer = nullptr;
+    bool presentDone = false;
 #endif
     SlotManager slot_mgr;
     uint64_t generation = 1;
