@@ -161,7 +161,9 @@ bool do_present(PresentJob& j)
             std::lock_guard<std::mutex> hwc_lk(g_hwc_mutex[j.drv_display_id]);
 #ifdef TARGET_USES_REAL_HWC
             Display& D = g_displays[j.drv_display_id];
-            D.presentDone = false;
+            stop_vsync_thread(D);
+            uint32_t numTypes = 0;
+            uint32_t numRequests = 0;
 #endif
 
             dsnap = snapshot_display_runtime_atomic(j.drv_display_id);
@@ -173,11 +175,6 @@ bool do_present(PresentJob& j)
             if (!hwcDisp) [[unlikely]] {
                 return false;
             }
-
-#ifdef TARGET_USES_REAL_HWC
-            uint32_t numTypes = 0;
-            uint32_t numRequests = 0;
-#endif
 
             err = hwc2_compat_display_set_client_target(hwcDisp, j.slot, j.rwb.get(),
                                                         -1, HAL_DATASPACE_UNKNOWN);
@@ -203,7 +200,8 @@ bool do_present(PresentJob& j)
                 sync_wait(presentFence, -1);
                 close(presentFence);
             }
-            D.presentDone = true;
+            evdi_vsync(D.display_id);
+            start_vsync_thread(D);
 #endif
         }
 

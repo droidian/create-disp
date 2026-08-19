@@ -213,15 +213,67 @@ void onDpmsReceived(HWC2EventListener* listener, int32_t sequenceId, hwc2_displa
     }
 }
 #else
+void vsync_thread_func(Display& D)
+{
+    std::unique_lock<std::mutex> lock(D.vsync_mutex);
+
+    while (!D.vsync_stop) {
+        const auto period =
+            std::chrono::nanoseconds(D.vsync_period_ns);
+
+        if (D.vsync_cv.wait_for(lock, period, [&D] {
+                return D.vsync_stop;
+            })) {
+            return;
+        }
+
+        if (D.vsync_stop)
+            return;
+
+        lock.unlock();
+        evdi_vsync(D.display_id);
+        lock.lock();
+    }
+}
+
+void start_vsync_thread(Display& D)
+{
+    std::lock_guard<std::mutex> lock(D.vsync_mutex);
+
+    if (D.vsync_thread.joinable())
+        return;
+
+    D.vsync_stop = false;
+    D.vsync_thread = std::thread(vsync_thread_func, std::ref(D));
+}
+
+void stop_vsync_thread(Display& D)
+{
+    {
+        std::lock_guard<std::mutex> lock(D.vsync_mutex);
+        D.vsync_stop = true;
+    }
+
+    D.vsync_cv.notify_one();
+
+    if (D.vsync_thread.joinable())
+        D.vsync_thread.join();
+}
+
 void handle_disp_pwr(const std::array<uint8_t, 32>& data, int poll_id)
 {
     evdi_disp_power dp;
     memcpy(&dp, data.data(), sizeof(struct evdi_disp_power));
 
-    fprintf(stderr, "HANDLE DISPLAY POWER: %d\n", dp.power_on);
     Display& D = g_displays[dp.display_id];
+
+    if(dp.power_on)
+        start_vsync_thread(D);
+
     hwc2_compat_display_set_power_mode(D.hwcDisplay, dp.power_on ? HWC2_POWER_MODE_ON : HWC2_POWER_MODE_OFF);
-    hwc2_compat_display_set_vsync_enabled(D.hwcDisplay, dp.power_on ? HWC2_VSYNC_ENABLE : HWC2_VSYNC_DISABLE);
+
+    if(!dp.power_on)
+        stop_vsync_thread(D);
 }
 #endif
 
@@ -334,7 +386,7 @@ void onVsyncReceived(HWC2EventListener* listener, int32_t sequenceId, hwc2_displ
     (void)listener;
     (void)sequenceId;
     (void)timestamp;
-
+#ifndef TARGET_USES_REAL_HWC
     const long long hwc_id = (long long)display;
     int drv_id = drv_id_for_hwc_atomic(hwc_id);
 
@@ -342,13 +394,9 @@ void onVsyncReceived(HWC2EventListener* listener, int32_t sequenceId, hwc2_displ
         std::lock_guard<std::mutex> lk(g_display_mutex);
         drv_id = drv_id_for_hwc(hwc_id);
     }
-#ifdef TARGET_USES_REAL_HWC
-    Display& D = g_displays[drv_id];
-    if(!D.presentDone)
-        return;
-#endif
+
     if (drv_id >= 0) {
-#ifndef TARGET_USES_REAL_HWC
+
         if (!g_display_power_mode[drv_id])
             return;
 
@@ -356,16 +404,9 @@ void onVsyncReceived(HWC2EventListener* listener, int32_t sequenceId, hwc2_displ
         if (vsync_ret < 0 && errno != ETIMEDOUT && errno != ENODEV && errno != EBADF) {
             fprintf(stderr, "vsync failed for display %d: %d (%s)\n",
                     drv_id, errno, strerror(errno));
-#else
-        if(D.presentDone){
-            int vsync_ret = evdi_vsync(drv_id);
-            if (vsync_ret < 0 && errno != ETIMEDOUT && errno != ENODEV && errno != EBADF) {
-                fprintf(stderr, "vsync failed for display %d: %d (%s)\n",
-                        drv_id, errno, strerror(errno));
-            }
         }
-#endif
     }
+#endif
 }
 
 void onHotplugReceived(HWC2EventListener* listener, int32_t sequenceId, hwc2_display_t display, bool connected, bool primaryDisplay)
@@ -565,6 +606,7 @@ int update_display(int display_id)
             hwc2_compat_display_destroy_layer(D.hwcDisplay, D.layer);
             D.layer = nullptr;
         }
+        D.vsync_period_ns = config->vsyncPeriod;
         D.layer = hwc2_compat_display_create_layer(D.hwcDisplay);
         hwc2_compat_layer_set_blend_mode(D.layer, HWC2_BLEND_MODE_NONE);
         hwc2_compat_layer_set_composition_type(D.layer, HWC2_COMPOSITION_CLIENT);
@@ -572,8 +614,8 @@ int update_display(int display_id)
         hwc2_compat_layer_set_display_frame(D.layer, 0, 0, config->width, config->height);
         hwc2_compat_layer_set_visible_region(D.layer, 0, 0, config->width, config->height);
 
+        start_vsync_thread(D);
         hwc2_compat_display_set_power_mode(D.hwcDisplay, HWC2_POWER_MODE_ON);
-        hwc2_compat_display_set_vsync_enabled(D.hwcDisplay, HWC2_VSYNC_ENABLE);
 #endif
 
         if (!force_reconnect && !mode_changed && D.stride != 0) [[likely]] {
