@@ -11,3 +11,6 @@ override_dh_auto_configure:
 		--buildsystem=cmake \
 		--builddirectory=obj-$(DEB_HOST_GNU_TYPE) -- \
 		-DTARGET_USES_REAL_HWC=$(REAL_HWC)
+
+override_dh_installsystemd:
+	dh_installsystemd --name create-disp --no-restart-on-upgrade
