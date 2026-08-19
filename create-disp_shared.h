@@ -35,7 +35,10 @@
 #include <hybris/gralloc/gralloc.h>
 #include <hybris/hwc2/hwc2_compatibility_layer.h>
 #include <hybris/platforms/common/windowbuffer.h>
+#ifdef TARGET_USES_REAL_HWC
 #include <sync/sync.h>
+#include <condition_variable>
+#endif
 
 namespace create_disp {
 
@@ -206,7 +209,12 @@ struct Display {
     hwc2_compat_display_t* hwcDisplay = nullptr;
 #ifdef TARGET_USES_REAL_HWC
     hwc2_compat_layer_t* layer = nullptr;
-    bool presentDone = false;
+
+    std::mutex vsync_mutex;
+    std::condition_variable vsync_cv;
+    std::thread vsync_thread;
+    bool vsync_stop = false;
+    int64_t vsync_period_ns = 0;
 #endif
     SlotManager slot_mgr;
     uint64_t generation = 1;
@@ -398,6 +406,9 @@ void destroy_buff(const std::array<uint8_t, 32>& data, int poll_id);
 void create_buff(const std::array<uint8_t, 32>& data, int poll_id);
 #ifdef TARGET_USES_REAL_HWC
 void handle_disp_pwr(const std::array<uint8_t, 32>& data, int poll_id);
+void vsync_thread_func(Display& D);
+void start_vsync_thread(Display& D);
+void stop_vsync_thread(Display& D);
 #endif
 
 void update_thread_main();
