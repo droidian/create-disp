@@ -161,7 +161,6 @@ bool do_present(PresentJob& j)
             std::lock_guard<std::mutex> hwc_lk(g_hwc_mutex[j.drv_display_id]);
 #ifdef TARGET_USES_REAL_HWC
             Display& D = g_displays[j.drv_display_id];
-            stop_vsync_thread(D);
             uint32_t numTypes = 0;
             uint32_t numRequests = 0;
 #endif
@@ -200,8 +199,6 @@ bool do_present(PresentJob& j)
                 sync_wait(presentFence, -1);
                 close(presentFence);
             }
-            evdi_vsync(D.display_id);
-            start_vsync_thread(D);
 #endif
         }
 

@@ -213,52 +213,6 @@ void onDpmsReceived(HWC2EventListener* listener, int32_t sequenceId, hwc2_displa
     }
 }
 #else
-void vsync_thread_func(Display& D)
-{
-    std::unique_lock<std::mutex> lock(D.vsync_mutex);
-
-    while (!D.vsync_stop) {
-        const auto period =
-            std::chrono::nanoseconds(D.vsync_period_ns);
-
-        if (D.vsync_cv.wait_for(lock, period, [&D] {
-                return D.vsync_stop;
-            })) {
-            return;
-        }
-
-        if (D.vsync_stop)
-            return;
-
-        lock.unlock();
-        evdi_vsync(D.display_id);
-        lock.lock();
-    }
-}
-
-void start_vsync_thread(Display& D)
-{
-    std::lock_guard<std::mutex> lock(D.vsync_mutex);
-
-    if (D.vsync_thread.joinable())
-        return;
-
-    D.vsync_stop = false;
-    D.vsync_thread = std::thread(vsync_thread_func, std::ref(D));
-}
-
-void stop_vsync_thread(Display& D)
-{
-    {
-        std::lock_guard<std::mutex> lock(D.vsync_mutex);
-        D.vsync_stop = true;
-    }
-
-    D.vsync_cv.notify_one();
-
-    if (D.vsync_thread.joinable())
-        D.vsync_thread.join();
-}
 
 void handle_disp_pwr(const std::array<uint8_t, 32>& data, int poll_id)
 {
@@ -267,13 +221,7 @@ void handle_disp_pwr(const std::array<uint8_t, 32>& data, int poll_id)
 
     Display& D = g_displays[dp.display_id];
 
-    if(dp.power_on)
-        start_vsync_thread(D);
-
     hwc2_compat_display_set_power_mode(D.hwcDisplay, dp.power_on ? HWC2_POWER_MODE_ON : HWC2_POWER_MODE_OFF);
-
-    if(!dp.power_on)
-        stop_vsync_thread(D);
 }
 #endif
 
@@ -606,7 +554,6 @@ int update_display(int display_id)
             hwc2_compat_display_destroy_layer(D.hwcDisplay, D.layer);
             D.layer = nullptr;
         }
-        D.vsync_period_ns = config->vsyncPeriod;
         D.layer = hwc2_compat_display_create_layer(D.hwcDisplay);
         hwc2_compat_layer_set_blend_mode(D.layer, HWC2_BLEND_MODE_NONE);
         hwc2_compat_layer_set_composition_type(D.layer, HWC2_COMPOSITION_CLIENT);
@@ -614,7 +561,6 @@ int update_display(int display_id)
         hwc2_compat_layer_set_display_frame(D.layer, 0, 0, config->width, config->height);
         hwc2_compat_layer_set_visible_region(D.layer, 0, 0, config->width, config->height);
 
-        start_vsync_thread(D);
         hwc2_compat_display_set_power_mode(D.hwcDisplay, HWC2_POWER_MODE_ON);
 #endif
 
